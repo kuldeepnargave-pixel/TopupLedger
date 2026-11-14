@@ -1,0 +1,11 @@
+# MySQL 8 for TopupLedger.
+# Password is a DEV-ONLY value (do not use in production). Set MYSQL_ROOT_PASSWORD and the
+# app connection string via environment variables for any non-dev deployment.
+[mysqld]
+character-set-server=utf8mb4
+collation-server=utf8mb4_unicode_ci
+default-storage-engine=innodb
+sql-mode=STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION
+max_connections=200
+innodb_buffer_pool_size=512M
+innodb_lock_wait_timeout=10

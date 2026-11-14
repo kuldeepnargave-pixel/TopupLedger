@@ -1,0 +1,17 @@
+@model TopupLedger.Portal.Models.SettlementGenerateViewModel
+@{
+    ViewData["Title"] = "Settlements";
+}
+
+<h2>Generate settlement</h2>
+
+<form asp-action="Generate" method="post">
+    @Html.AntiForgeryToken()
+    <div class="mb-3">
+        <label asp-for="BusinessDay" class="form-label"></label>
+        <input asp-for="BusinessDay" type="date" class="form-control" />
+        <span asp-validation-for="BusinessDay" class="text-danger"></span>
+        <small class="text-muted">Dubai business day (22:00 cut-off applied). Re-generating for the same day returns the existing result.</small>
+    </div>
+    <button type="submit" class="btn btn-primary">Generate</button>
+</form>

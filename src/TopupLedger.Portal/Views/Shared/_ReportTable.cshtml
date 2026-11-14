@@ -1,0 +1,55 @@
+@model List<Dictionary<string, object>>
+@{
+    var title = ViewData["Title"]?.ToString() ?? "Report";
+    var rows = Model;
+    var columns = rows.Count > 0 ? rows[0].Keys.ToList() : new List<string>();
+    var isAdmin = User.IsInRole("ADMIN");
+    var filter = ViewBag.Filter as TopupLedger.Portal.Models.ReportFilterViewModel ?? new TopupLedger.Portal.Models.ReportFilterViewModel();
+}
+
+<h2>@title</h2>
+
+<form method="get" class="row g-2 mb-3">
+    @if (ViewBag.NeedsBusinessDay as bool? == true) {
+        <div class="col-md-3"><input name="BusinessDay" type="date" class="form-control form-control-sm" value="@filter.BusinessDay" /></div>
+    } else if (ViewBag.NeedsAsOf as bool? == true) {
+        <div class="col-md-3"><input name="AsOf" type="datetime-local" class="form-control form-control-sm" value="@filter.AsOf" /></div>
+    } else {
+        <div class="col-md-2"><input name="From" type="date" class="form-control form-control-sm" value="@filter.From" /></div>
+        <div class="col-md-2"><input name="To" type="date" class="form-control form-control-sm" value="@filter.To" /></div>
+    }
+    @if (ViewBag.NeedsPartnerId as bool? == true) {
+        <div class="col-md-2"><input name="PartnerId" type="number" class="form-control form-control-sm" placeholder="Partner ID (optional)" value="@filter.PartnerId" /></div>
+    }
+    @if (ViewBag.NeedsLimit as bool? == true) {
+        <div class="col-md-2"><input name="Limit" type="number" min="1" max="100" class="form-control form-control-sm" placeholder="Limit (10)" value="@filter.Limit" /></div>
+    }
+    @if (ViewBag.NeedsDays as bool? == true) {
+        <div class="col-md-2"><input name="Days" type="number" min="1" max="365" class="form-control form-control-sm" placeholder="Days (7)" value="@filter.Days" /></div>
+    }
+    <div class="col-md-2"><button type="submit" class="btn btn-sm btn-primary">Apply</button></div>
+</form>
+
+@if (rows.Count == 0) {
+    <div class="alert alert-info">No data for the selected range.</div>
+} else {
+    <div class="table-responsive">
+        <table class="table table-sm table-striped tbl-reports">
+            <thead>
+                <tr>
+                    @foreach (var c in columns) { <th>@c</th> }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in rows) {
+                    <tr>
+                        @foreach (var c in columns) {
+                            var v = r.TryGetValue(c, out var val) ? val : null;
+                            <td>@(v == null ? "" : v is DateTime dt ? dt.ToString("yyyy-MM-dd HH:mm:ss") : v is long l ? l.ToString("N0") : v.ToString())</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

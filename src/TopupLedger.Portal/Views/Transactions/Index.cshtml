@@ -1,0 +1,58 @@
+@model IEnumerable<TopupLedger.Domain.Entities.Topup>
+@{
+    var search = ViewBag.Search as TopupLedger.Portal.Models.TransactionsSearchViewModel ?? new TopupLedger.Portal.Models.TransactionsSearchViewModel();
+    var totalPages = (int)(ViewBag.TotalPages ?? 1);
+    var current = (int)(ViewBag.CurrentPage ?? 1);
+    ViewData["Title"] = "Transactions";
+}
+
+<h2>Transactions</h2>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-2"><input name="Msisdn" class="form-control form-control-sm" placeholder="MSISDN" value="@search.Msisdn" /></div>
+    <div class="col-md-2"><input name="ClientRef" class="form-control form-control-sm" placeholder="clientRef" value="@search.ClientRef" /></div>
+    <div class="col-md-2">
+        <select name="Status" class="form-select form-select-sm">
+            <option value="">(any status)</option>
+            @foreach (var s in new[] { "PENDING", "SUCCESS", "FAILED", "EXPIRED" }) {
+                <option value="@s" selected="@(search.Status == s)">@s</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-2"><input name="From" type="date" class="form-control form-control-sm" value="@(search.From?.ToString("yyyy-MM-dd"))" /></div>
+    <div class="col-md-2"><input name="To" type="date" class="form-control form-control-sm" value="@(search.To?.ToString("yyyy-MM-dd"))" /></div>
+    <div class="col-md-2"><button type="submit" class="btn btn-sm btn-primary w-100">Search</button></div>
+</form>
+
+<table class="table table-sm table-striped">
+    <thead><tr><th>ID</th><th>Status</th><th>MSISDN</th><th>Operator</th><th>ClientRef</th><th>Face value</th><th>Created</th></tr></thead>
+    <tbody>
+        @foreach (var t in Model) {
+            <tr>
+                <td><a asp-action="Details" asp-route-id="@t.Id">@t.Id</a></td>
+                <td><span class="badge bg-secondary">@t.Status.ToString().ToUpperInvariant()</span></td>
+                <td><code>@t.MsisdnMasked</code></td>
+                <td>@t.Operator.ToCode().ToUpperInvariant()</td>
+                <td><code>@t.ClientRef</code></td>
+                <td>@((t.FaceValueFils / 100m).ToString("N2")) AED</td>
+                <td>@t.CreatedAtUtc.ToString("u")</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@if (totalPages > 1) {
+    <nav>
+        <ul class="pagination pagination-sm">
+            @for (int i = 1; i <= totalPages; i++) {
+                <li class="page-item @(i == current ? "active" : "")">
+                    <a class="page-link" asp-action="Index" asp-route-page="@i">@i</a>
+                </li>
+            }
+        </ul>
+    </nav>
+}
+
+@functions {
+    // Local helper to keep the view clean.
+}

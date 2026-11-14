@@ -1,0 +1,44 @@
+@model List<Dictionary<string, object>>
+@{
+    ViewData["Title"] = "Daily summary";
+    var filter = ViewBag.Filter as TopupLedger.Portal.Models.ReportFilterViewModel ?? new TopupLedger.Portal.Models.ReportFilterViewModel();
+}
+
+<h2>Daily summary <small class="text-muted">Report #1</small></h2>
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-2"><input name="From" type="date" class="form-control form-control-sm" value="@filter.From" /></div>
+    <div class="col-md-2"><input name="To" type="date" class="form-control form-control-sm" value="@filter.To" /></div>
+    <div class="col-md-2"><button type="submit" class="btn btn-sm btn-primary">Apply</button></div>
+</form>
+
+<canvas id="dailySummaryChart" height="100"></canvas>
+
+@if (Model.Count > 0) {
+    <div class="table-responsive mt-3">
+        <table class="table table-sm table-striped">
+            <thead><tr>@foreach (var c in Model[0].Keys) { <th>@c</th> }</tr></thead>
+            <tbody>
+                @foreach (var r in Model) {
+                    <tr>
+                        @foreach (var c in Model[0].Keys) {
+                            var v = r.TryGetValue(c, out var val) ? val : null;
+                            <td>@(v == null ? "" : v is DateTime dt ? dt.ToString("yyyy-MM-dd") : v is long l ? l.ToString("N0") : v is decimal d ? d.ToString("N2") : v.ToString())</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+} else {
+    <div class="alert alert-info">No data.</div>
+}
+
+@section Scripts {
+    <script>
+        const rows = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model));
+        const labels = rows.filter(r => r.business_date !== "GRAND_TOTAL").map(r => r.business_date);
+        const successData = rows.filter(r => r.business_date !== "GRAND_TOTAL").map(r => r.count_success || 0);
+        const ctx = document.getElementById('dailySummaryChart').getContext('2d');
+        new Chart(ctx, { type: 'bar', data: { labels, datasets: [{ label: 'Success', data: successData, backgroundColor: '#0d6efd' }] }, options: { responsive: true } });
+    </script>
+}

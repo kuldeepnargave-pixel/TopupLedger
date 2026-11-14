@@ -1,0 +1,29 @@
+@model TopupLedger.Portal.Models.ReconciliationUploadViewModel
+@{
+    ViewData["Title"] = "Reconciliation upload";
+}
+
+<h2>Reconciliation - Upload operator CSV</h2>
+
+<form asp-action="Upload" method="post" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+    <div class="mb-3">
+        <label class="form-label">Operator</label>
+        <select asp-for="Operator" class="form-select">
+            <option value="etisalat">etisalat</option>
+            <option value="du">du</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label asp-for="File" class="form-label">CSV file</label>
+        <input asp-for="File" type="file" accept=".csv,text/csv" class="form-control" />
+        <span asp-validation-for="File" class="text-danger"></span>
+        <small class="text-muted">
+            Columns: <code>operator_txn_id,msisdn,amount_aed,status,event_time_dubai</code>.
+            UTF-8 BOM, Windows line endings, quoted fields with thousand separators and blank trailing lines are all handled.
+            Re-uploading the same file (same sha256) returns the existing result without creating duplicates.
+        </small>
+    </div>
+    <button type="submit" class="btn btn-primary">Upload and process</button>
+</form>

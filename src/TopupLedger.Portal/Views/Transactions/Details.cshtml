@@ -1,0 +1,63 @@
+@model TopupLedger.Portal.Models.TransactionDetailViewModel
+@{
+    var t = Model.Topup;
+    ViewData["Title"] = $"Transaction #{t.Id}";
+}
+
+<h2>Transaction #@t.Id</h2>
+<p>
+    Status: <span class="badge bg-secondary">@t.Status.ToString().ToUpperInvariant()</span> &middot;
+    Operator: <strong>@t.Operator.ToCode().ToUpperInvariant()</strong> &middot;
+    Client ref: <code>@t.ClientRef</code>
+</p>
+
+<dl class="row">
+    <dt class="col-sm-3">MSISDN (masked)</dt><dd class="col-sm-9"><code>@t.MsisdnMasked</code></dd>
+    <dt class="col-sm-3">Face value</dt><dd class="col-sm-9">@((t.FaceValueFils / 100m).ToString("N2")) AED <span class="money-fils">(@t.FaceValueFils fils)</span></dd>
+    <dt class="col-sm-3">Retailer commission</dt><dd class="col-sm-9">@((t.RetailerCommissionFils / 100m).ToString("N2")) AED <span class="money-fils">(@t.RetailerCommissionFils fils)</span></dd>
+    <dt class="col-sm-3">Distributor share</dt><dd class="col-sm-9">@((t.DistributorShareFils / 100m).ToString("N2")) AED <span class="money-fils">(@t.DistributorShareFils fils)</span></dd>
+    <dt class="col-sm-3">Wallet debit</dt><dd class="col-sm-9">@((t.WalletDebitFils / 100m).ToString("N2")) AED <span class="money-fils">(@t.WalletDebitFils fils)</span></dd>
+    <dt class="col-sm-3">Operator txn id</dt><dd class="col-sm-9"><code>@(t.OperatorTxnId ?? "—")</code></dd>
+    <dt class="col-sm-3">Created</dt><dd class="col-sm-9">@t.CreatedAtUtc.ToString("u") (UTC)</dd>
+    <dt class="col-sm-3">Business date</dt><dd class="col-sm-9">@t.BusinessDateUtc.ToString("yyyy-MM-dd")</dd>
+    <dt class="col-sm-3">Final state at</dt><dd class="col-sm-9">@(t.FinalStateAtUtc?.ToString("u") ?? "—")</dd>
+</dl>
+
+<h4>Ledger entries</h4>
+<table class="table table-sm table-striped">
+    <thead><tr><th>ID</th><th>Type</th><th>Reason</th><th>Amount</th><th>Running balance</th><th>Reason text</th><th>Created</th></tr></thead>
+    <tbody>
+        @foreach (var e in Model.LedgerEntries) {
+            <tr>
+                <td>@e.Id</td>
+                <td>@e.EntryType.ToString().ToUpperInvariant()</td>
+                <td>@e.Reason</td>
+                <td>@((e.AmountFils / 100m).ToString("N2")) AED</td>
+                <td>@((e.RunningBalanceFils / 100m).ToString("N2")) AED</td>
+                <td>@(e.ReasonText ?? "")</td>
+                <td>@e.CreatedAtUtc.ToString("u")</td>
+            </tr>
+        }
+        @if (Model.LedgerEntries.Count == 0) { <tr><td colspan="7" class="text-muted">No ledger entries.</td></tr> }
+    </tbody>
+</table>
+
+<h4>Callback history</h4>
+<table class="table table-sm table-striped">
+    <thead><tr><th>ID</th><th>Operator</th><th>Reported status</th><th>Outcome</th><th>Operator txn id</th><th>Received</th></tr></thead>
+    <tbody>
+        @foreach (var c in Model.Callbacks) {
+            <tr>
+                <td>@c.Id</td>
+                <td>@c.Operator.ToCode().ToUpperInvariant()</td>
+                <td>@c.ReportedStatus.ToString().ToUpperInvariant()</td>
+                <td>@c.Outcome</td>
+                <td>@(c.OperatorTxnId ?? "—")</td>
+                <td>@c.ReceivedAtUtc.ToString("u")</td>
+            </tr>
+        }
+        @if (Model.Callbacks.Count == 0) { <tr><td colspan="6" class="text-muted">No callbacks received.</td></tr> }
+    </tbody>
+</table>
+
+<a asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; Back</a>

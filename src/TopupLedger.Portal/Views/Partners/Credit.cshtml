@@ -1,0 +1,29 @@
+@model ManualCreditViewModel
+@{
+    ViewData["Title"] = "Manual wallet credit";
+    var balance = (long)(ViewBag.CurrentBalanceFils ?? 0L);
+}
+
+<h2>Manual wallet credit</h2>
+<p>Partner: <strong>@ViewBag.PartnerName</strong></p>
+<p>Current balance: <strong>@((balance / 100m).ToString("N2")) AED</strong> <span class="money-fils">(@balance fils)</span></p>
+
+<form asp-action="Credit" method="post">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+    <input type="hidden" asp-for="PartnerId" />
+    <div class="mb-3">
+        <label asp-for="AmountAed" class="form-label"></label>
+        <input asp-for="AmountAed" type="number" step="0.01" min="0.01" class="form-control" />
+        <span asp-validation-for="AmountAed" class="text-danger"></span>
+        <small class="text-muted">In AED. Will be converted to integer fils.</small>
+    </div>
+    <div class="mb-3">
+        <label asp-for="Reason" class="form-label"></label>
+        <textarea asp-for="Reason" class="form-control" rows="3" required></textarea>
+        <span asp-validation-for="Reason" class="text-danger"></span>
+        <small class="text-muted">A reason is required and is stored in the wallet ledger.</small>
+    </div>
+    <button type="submit" class="btn btn-success">Credit wallet</button>
+    <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
+</form>

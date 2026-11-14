@@ -1,0 +1,33 @@
+@model Dictionary<string, object>
+@{
+    ViewData["Title"] = "Wallet statement";
+}
+<h2>Wallet statement</h2>
+@if (Model.Count == 0) {
+    <div class="alert alert-info">No data.</div>
+} else {
+    <dl class="row mb-3">
+        <dt class="col-sm-3">Wallet ID</dt><dd class="col-sm-9">@Model["wallet_id"]</dd>
+        <dt class="col-sm-3">Partner ID</dt><dd class="col-sm-9">@Model["partner_id"]</dd>
+        <dt class="col-sm-3">From</dt><dd class="col-sm-9">@Model["from"]</dd>
+        <dt class="col-sm-3">To</dt><dd class="col-sm-9">@Model["to"]</dd>
+        <dt class="col-sm-3">Opening balance</dt><dd class="col-sm-9">@Model["opening_balance_fils"] fils <span class="text-muted">(@Model["opening_balance_aed"] AED)</span></dd>
+        <dt class="col-sm-3">Closing balance</dt><dd class="col-sm-9">@Model["closing_balance_fils"] fils <span class="text-muted">(@Model["closing_balance_aed"] AED)</span></dd>
+    </dl>
+    var entries = Model["entries"] as List<Dictionary<string, object>>;
+    if (entries != null && entries.Count > 0) {
+        <table class="table table-sm table-striped">
+            <thead><tr>@foreach (var c in entries[0].Keys) { <th>@c</th> }</tr></thead>
+            <tbody>
+                @foreach (var r in entries) {
+                    <tr>
+                        @foreach (var c in entries[0].Keys) {
+                            var v = r.TryGetValue(c, out var val) ? val : null;
+                            <td>@(v == null ? "" : v is DateTime dt ? dt.ToString("u") : v is long l ? l.ToString("N0") : v.ToString())</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}

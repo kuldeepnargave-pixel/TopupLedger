@@ -1,0 +1,68 @@
+@model PartnerListViewModel
+@{
+    ViewData["Title"] = "Partners";
+    var isAdmin = User.IsInRole("ADMIN");
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Partners</h2>
+    @if (isAdmin) {
+        <a asp-action="Create" class="btn btn-primary btn-sm">+ New partner</a>
+    }
+</div>
+
+<table class="table table-sm table-striped">
+    <thead>
+        <tr>
+            <th>ID</th><th>Name</th><th>API Key</th><th>Distributor</th><th>Status</th>
+            @if (isAdmin) { <th>Actions</th> }
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var p in Model.Partners) {
+            <tr>
+                <td>@p.Id</td>
+                <td>@p.Name</td>
+                <td><code>@p.ApiKey</code></td>
+                <td>@(p.DistributorId?.ToString() ?? "—")</td>
+                <td>
+                    @if (p.Status == "Active") {
+                        <span class="badge bg-success">Active</span>
+                    } else {
+                        <span class="badge bg-danger">Suspended</span>
+                    }
+                </td>
+                @if (isAdmin) {
+                    <td>
+                        @if (p.Status == "Active") {
+                            <form asp-action="Suspend" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@p.Id" />
+                                <button type="submit" class="btn btn-sm btn-outline-warning">Suspend</button>
+                            </form>
+                        } else {
+                            <form asp-action="Activate" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@p.Id" />
+                                <button type="submit" class="btn btn-sm btn-outline-success">Activate</button>
+                            </form>
+                        }
+                        <a asp-action="Credit" asp-route-id="@p.Id" class="btn btn-sm btn-outline-secondary">Credit wallet</a>
+                    </td>
+                }
+            </tr>
+        }
+    </tbody>
+</table>
+
+@if (Model.TotalPages > 1) {
+    <nav>
+        <ul class="pagination pagination-sm">
+            @for (int i = 1; i <= Model.TotalPages; i++) {
+                <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                    <a class="page-link" asp-action="Index" asp-route-page="@i">@i</a>
+                </li>
+            }
+        </ul>
+    </nav>
+}

@@ -1,0 +1,23 @@
+@model PartnerCreatedViewModel
+@{
+    ViewData["Title"] = "Partner created";
+}
+
+<div class="alert alert-warning">
+    <strong>Important:</strong> the secret below is shown <strong>only once</strong>. Copy it now and store it securely.
+    It cannot be retrieved later.
+</div>
+
+<h2>Partner created</h2>
+<dl class="row">
+    <dt class="col-sm-3">Partner ID</dt><dd class="col-sm-9">@Model.PartnerId</dd>
+    <dt class="col-sm-3">API Key</dt><dd class="col-sm-9"><code>@Model.ApiKey</code></dd>
+    <dt class="col-sm-3">API Secret (shown once)</dt><dd class="col-sm-9"><code class="text-danger">@Model.PlaintextSecret</code></dd>
+</dl>
+
+<p class="text-muted small">
+    The secret has been AES-GCM encrypted and stored in the database. To authenticate partner API
+    requests, the partner signs each request with HMAC-SHA256 using this secret (see Postman collection).
+</p>
+
+<a asp-action="Index" class="btn btn-primary">Back to partners</a>

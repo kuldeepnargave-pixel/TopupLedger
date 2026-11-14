@@ -1,0 +1,51 @@
+@model DashboardViewModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<h2>Dashboard</h2>
+<p class="text-muted">Business day (Dubai): <strong>@Model.BusinessDay.ToString("yyyy-MM-dd")</strong> (22:00 cut-off applied)</p>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <h6 class="card-title">Today's count</h6>
+                <h2 class="mb-0">@Model.TotalCount</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h6 class="card-title">Total face value</h6>
+                <h2 class="mb-0">@((Model.TotalFaceValueFils / 100m).ToString("N2")) <small>AED</small></h2>
+                <div class="money-fils text-light">@Model.TotalFaceValueFils fils</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">Status summary</h6>
+                <ul class="list-inline mb-0">
+                    @foreach (var kv in Model.StatusCounts) {
+                        <li class="list-inline-item me-3"><span class="badge bg-secondary">@kv.Key</span> @kv.Value</li>
+                    }
+                    @if (Model.StatusCounts.Count == 0) { <span class="text-muted">No transactions yet today.</span> }
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h5>Operator summary</h5>
+<table class="table table-sm table-striped">
+    <thead><tr><th>Operator</th><th>Count</th></tr></thead>
+    <tbody>
+        @foreach (var kv in Model.OperatorCounts) {
+            <tr><td>@kv.Key</td><td>@kv.Value</td></tr>
+        }
+        @if (Model.OperatorCounts.Count == 0) { <tr><td colspan="2" class="text-muted">No data.</td></tr> }
+    </tbody>
+</table>

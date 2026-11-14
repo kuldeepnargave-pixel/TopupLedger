@@ -15,13 +15,12 @@ using TopupLedger.Infrastructure.Data;
 namespace TopupLedger.Infrastructure.Services;
 
 /// <summary>
-/// Implements all 10 read-only report APIs. SQL aggregations run inside MySQL (GROUP BY,
-/// window functions); only final aggregated rows are materialised in C#. MSISDNs are masked
-/// in every result. Reports are read-only: no row locks are taken.
+/// Implements all 10 read-only report APIs. SQL aggregations run inside MySQL.
+/// MSISDNs are masked in every result.
+/// Reports are read-only: no row locks are taken.
 ///
-/// Business-day semantics: all dates are interpreted in Dubai time (UTC+04:00) with a 22:00
-/// cut-off. The business_date_utc column on topups is precomputed at insert time and indexed,
-/// so report queries filter on that column directly (no per-row timezone conversion at query time).
+/// Business-day semantics: all dates are interpreted in Dubai time (UTC+04:00)
+/// with a 22:00 cut-off.
 /// </summary>
 public sealed class ReportService
 {
@@ -39,11 +38,9 @@ public sealed class ReportService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Validates from/to query parameters: both optional (default = last 7 business days),
-    /// both must be valid YYYY-MM-DD, and the range must not exceed 31 business days.
-    /// Returns the (fromUtc, toUtc) range.
-    /// </summary>
+    // =====================================================================
+    // Date range validation
+    // =====================================================================
     public (DateTime fromUtc, DateTime toUtc) ResolveRange(
         string? from,
         string? to,
@@ -66,7 +63,6 @@ public sealed class ReportService
                 : _businessDays.ParseBusinessDay(to);
         }
 
-        // Range inclusive of both ends: business day T -> business day T+31 covers up to 32 days.
         if ((t - f).TotalDays > maxDays)
         {
             throw new DomainException(
@@ -74,13 +70,11 @@ public sealed class ReportService
                 $"Date range must not exceed {maxDays} business days. Got {(t - f).TotalDays + 1} days.");
         }
 
-        return (f, t.AddDays(1)); // exclusive upper bound
+        return (f, t.AddDays(1));
     }
 
     // =====================================================================
     // Report 1: Daily summary
-    // Per business day: top-up count and face value by status, retailer commission,
-    // distributor share, grand total row.
     // =====================================================================
     public async Task<List<Dictionary<string, object>>> DailySummaryAsync(
         string? from,
@@ -110,7 +104,6 @@ ORDER BY t.business_date_utc;";
 
         var rows = new List<Dictionary<string, object>>();
 
-        // Do not dispose the connection returned by EF Core.
         var conn = _db.Database.GetDbConnection();
         bool closeConnection = conn.State != System.Data.ConnectionState.Open;
 
@@ -141,12 +134,10 @@ ORDER BY t.business_date_utc;";
         }
         finally
         {
-            // Close only if this method opened the connection.
             if (closeConnection)
                 await conn.CloseAsync();
         }
 
-        // Compute grand total.
         var totalRow = new Dictionary<string, object>
         {
             ["business_date"] = "GRAND_TOTAL",
@@ -170,7 +161,6 @@ ORDER BY t.business_date_utc;";
 
     // =====================================================================
     // Report 2: Operators
-    // Per operator: total count, success %, failed/expired count, average request-to-final-callback seconds.
     // =====================================================================
     public async Task<List<Dictionary<string, object>>> OperatorsAsync(
         string? from,
@@ -203,7 +193,6 @@ ORDER BY t.operator;";
 
     // =====================================================================
     // Report 3: Partners top (ranked by SUCCESS face value)
-    // Uses RANK() window function; ties share the same rank.
     // =====================================================================
     public async Task<List<Dictionary<string, object>>> PartnersTopAsync(
         string? from,
@@ -219,22 +208,25 @@ ORDER BY t.operator;";
         var sql = @"
 SELECT ranked.*
 FROM (
-  SELECT
-    p.id AS partner_id,
-    p.name AS partner_name,
-    SUM(t.face_value_fils) AS success_face_value_fils,
-    SUM(t.retailer_commission_fils) AS retailer_commission_fils,
-    SUM(t.distributor_share_fils) AS distributor_share_fils,
-    COUNT(*) AS success_count,
-    RANK() OVER (ORDER BY SUM(t.face_value_fils) DESC) AS rank
-  FROM topups t
-  JOIN partners p ON p.id = t.partner_id
-  WHERE t.status = 2
-    AND t.business_date_utc >= @from AND t.business_date_utc < @to
-  GROUP BY p.id, p.name
+    SELECT
+        p.id AS partner_id,
+        p.name AS partner_name,
+        SUM(t.face_value_fils) AS success_face_value_fils,
+        SUM(t.retailer_commission_fils) AS retailer_commission_fils,
+        SUM(t.distributor_share_fils) AS distributor_share_fils,
+        COUNT(*) AS success_count,
+        RANK() OVER (
+            ORDER BY SUM(t.face_value_fils) DESC
+        ) AS partner_rank
+    FROM topups t
+    JOIN partners p ON p.id = t.partner_id
+    WHERE t.status = 2
+      AND t.business_date_utc >= @from
+      AND t.business_date_utc < @to
+    GROUP BY p.id, p.name
 ) ranked
-WHERE ranked.rank <= @limit
-ORDER BY ranked.rank;";
+WHERE ranked.partner_rank <= @limit
+ORDER BY ranked.partner_rank;";
 
         return await ExecuteReaderAsync(sql, cmd =>
         {
@@ -245,7 +237,7 @@ ORDER BY ranked.rank;";
     }
 
     // =====================================================================
-    // Report 4: Commission by partner per business day (SUCCESS only)
+    // Report 4: Commission by partner per business day
     // =====================================================================
     public async Task<List<Dictionary<string, object>>> CommissionAsync(
         string? from,
@@ -281,8 +273,7 @@ ORDER BY t.business_date_utc, t.partner_id;";
     }
 
     // =====================================================================
-    // Report 5: Wallet balances at a past instant (calculated from ledger, NOT balance column)
-    // VIEWER cannot access this report (server-side enforced).
+    // Report 5: Wallet balances at a past instant
     // =====================================================================
     public async Task<List<Dictionary<string, object>>> WalletsAsOfAsync(
         DateTime asOfUtc,
@@ -307,9 +298,7 @@ ORDER BY w.id;";
     }
 
     // =====================================================================
-    // Report 6: Wallet statement (opening balance + ledger entries + running balance + closing balance)
-    // VIEWER cannot access this report (server-side enforced).
-    // Today's closing balance must equal current wallet balance.
+    // Report 6: Wallet statement
     // =====================================================================
     public async Task<Dictionary<string, object>> WalletStatementAsync(
         long partnerId,
@@ -331,7 +320,6 @@ ORDER BY w.id;";
                 httpStatusCode: 404);
         }
 
-        // Opening balance = SUM(ledger up to fromUtc).
         var openingSql = @"
 SELECT COALESCE(SUM(CASE WHEN entry_type = 1 THEN amount_fils WHEN entry_type = 2 THEN -amount_fils END), 0) AS opening_fils
 FROM wallet_ledger
@@ -339,7 +327,6 @@ WHERE wallet_id = @walletId AND created_at_utc < @from;";
 
         long openingFils;
 
-        // Do not dispose the connection returned by EF Core.
         var conn = _db.Database.GetDbConnection();
         bool closeConnection = conn.State != System.Data.ConnectionState.Open;
 
@@ -355,6 +342,7 @@ WHERE wallet_id = @walletId AND created_at_utc < @from;";
             AddParam(cmd, "@from", fromUtc);
 
             var result = await cmd.ExecuteScalarAsync(ct);
+
             openingFils = result == null || result == DBNull.Value
                 ? 0L
                 : Convert.ToInt64(result);
@@ -365,7 +353,6 @@ WHERE wallet_id = @walletId AND created_at_utc < @from;";
                 await conn.CloseAsync();
         }
 
-        // Ledger entries in the period.
         var entriesSql = @"
 SELECT id, entry_type, reason, amount_fils, running_balance_fils, reason_text, created_at_utc
 FROM wallet_ledger
@@ -379,7 +366,6 @@ ORDER BY id;";
             AddParam(cmd, "@to", toUtc);
         }, ct);
 
-        // Closing balance = current wallet balance if 'to' includes today, else running balance at last entry.
         long closingFils = wallet.BalanceFils;
 
         return new Dictionary<string, object>
@@ -398,8 +384,6 @@ ORDER BY id;";
 
     // =====================================================================
     // Report 7: Hourly
-    // 24 rows covering 22:00 Dubai -> 21:59 next day Dubai (= the business day window).
-    // Zero-activity hours must still appear.
     // =====================================================================
     public async Task<List<Dictionary<string, object>>> HourlyAsync(
         string businessDay,
@@ -426,7 +410,6 @@ ORDER BY hour_index;";
             AddParam(cmd, "@windowEnd", windowEndUtc);
         }, ct);
 
-        // Pad to exactly 24 hours.
         var byIndex = raw
             .Where(r => r["hour_index"] != DBNull.Value)
             .ToDictionary(r => Convert.ToInt32(r["hour_index"]), r => r);
@@ -455,7 +438,6 @@ ORDER BY hour_index;";
 
     // =====================================================================
     // Report 8: Failures
-    // FAILED/EXPIRED topups by operator with debited/refunded amounts. Flag mismatches.
     // =====================================================================
     public async Task<List<Dictionary<string, object>>> FailuresAsync(
         string? from,
@@ -526,8 +508,6 @@ ORDER BY uploaded_at_utc DESC;";
 
     // =====================================================================
     // Report 10: Partners inactive
-    // Active partners without a SUCCESS topup in the last N days.
-    // Includes partners who never had a successful topup (last_success_date = null).
     // =====================================================================
     public async Task<List<Dictionary<string, object>>> PartnersInactiveAsync(
         int days,
@@ -561,10 +541,9 @@ ORDER BY p.id;";
             ct);
     }
 
-    /// <summary>
-    /// Renders report rows as CSV. MSISDNs are already masked at the source for relevant reports;
-    /// for safety we also call MaskAll() on any column whose name contains "msisdn".
-    /// </summary>
+    // =====================================================================
+    // CSV Export
+    // =====================================================================
     public static string ToCsv(
         IEnumerable<Dictionary<string, object>> rows,
         IEnumerable<string>? columns = null)
@@ -617,10 +596,9 @@ ORDER BY p.id;";
         return s;
     }
 
-    /// <summary>
-    /// Executes a read-only SQL query using EF Core's existing database connection.
-    /// The EF-owned connection is never disposed here.
-    /// </summary>
+    // =====================================================================
+    // Shared SQL reader
+    // =====================================================================
     private async Task<List<Dictionary<string, object>>> ExecuteReaderAsync(
         string sql,
         Action<DbCommand>? paramAction,
@@ -665,6 +643,9 @@ ORDER BY p.id;";
         return rows;
     }
 
+    // =====================================================================
+    // SQL parameter helper
+    // =====================================================================
     private static void AddParam(DbCommand cmd, string name, object? value)
     {
         var p = cmd.CreateParameter();

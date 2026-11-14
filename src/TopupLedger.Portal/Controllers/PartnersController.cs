@@ -1,3 +1,4 @@
+
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,9 +22,14 @@ public class PartnersController : Controller
     private readonly IUnitOfWork _uow;
     private readonly ILogger<PartnersController> _logger;
 
-    public PartnersController(TopupLedgerDbContext db, IPartnerRepository partners,
-        IWalletRepository wallets, IPartnerSecretProtector protector, WalletAppService walletSvc,
-        IUnitOfWork uow, ILogger<PartnersController> logger)
+    public PartnersController(
+        TopupLedgerDbContext db,
+        IPartnerRepository partners,
+        IWalletRepository wallets,
+        IPartnerSecretProtector protector,
+        WalletAppService walletSvc,
+        IUnitOfWork uow,
+        ILogger<PartnersController> logger)
     {
         _db = db;
         _partners = partners;
@@ -38,7 +44,9 @@ public class PartnersController : Controller
     {
         var list = await _partners.ListAsync(page, pageSize);
         var total = await _partners.CountAsync();
+
         var partnerIds = list.Select(p => p.Id).ToList();
+
         var walletBalances = await _db.Wallets.AsNoTracking()
             .Where(w => partnerIds.Contains(w.PartnerId))
             .ToDictionaryAsync(w => w.PartnerId, w => w.BalanceFils);
@@ -56,23 +64,32 @@ public class PartnersController : Controller
             CurrentPage = page,
             TotalPages = (int)Math.Ceiling((double)total / pageSize)
         };
+
         return View(vm);
     }
 
     [HttpGet]
     [Authorize(Roles = "ADMIN")]
-    public IActionResult Create() => View(new CreatePartnerViewModel());
+    public IActionResult Create()
+    {
+        return View(new CreatePartnerViewModel());
+    }
 
     [HttpPost]
     [Authorize(Roles = "ADMIN")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(CreatePartnerViewModel model)
     {
-        if (!ModelState.IsValid) return View(model);
+        if (!ModelState.IsValid)
+            return View(model);
 
-        // Generate API key and HMAC secret. Show the plaintext secret ONCE.
-        string apiKey = "pk_live_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
-        string plaintextSecret = "sk_live_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(20)).ToLowerInvariant();
+        // Generate API key and HMAC secret. Show plaintext secret only once.
+        string apiKey = "pk_live_" +
+            Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
+
+        string plaintextSecret = "sk_live_" +
+            Convert.ToHexString(RandomNumberGenerator.GetBytes(20)).ToLowerInvariant();
+
         var (cipher, nonce, tag) = _protector.Encrypt(plaintextSecret);
 
         var partner = new Partner
@@ -86,17 +103,21 @@ public class PartnersController : Controller
             Status = PartnerStatus.Active,
             CreatedAtUtc = DateTime.UtcNow
         };
+
         await _partners.CreateAsync(partner);
 
-        // Create a wallet for the partner with zero balance.
+        // Create a zero-balance wallet for the new partner.
+        var now = DateTime.UtcNow;
+
         var wallet = new Wallet
         {
             PartnerId = partner.Id,
             BalanceFils = 0,
             Currency = "AED",
-            CreatedAtUtc = DateTime.UtcNow,
-            UpdatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
         };
+
         _db.Wallets.Add(wallet);
         await _db.SaveChangesAsync();
 
@@ -131,11 +152,27 @@ public class PartnersController : Controller
     public async Task<IActionResult> Credit(long id)
     {
         var partner = await _partners.GetByIdAsync(id);
-        if (partner == null) return NotFound();
+
+        if (partner == null)
+            return NotFound();
+
         var wallet = await _wallets.GetByPartnerAsync(id);
+
+        if (wallet == null)
+        {
+            _logger.LogWarning(
+                "Wallet not found for partner {PartnerId}", id);
+
+            return NotFound("Wallet not found for this partner.");
+        }
+
         ViewBag.PartnerName = partner.Name;
-        ViewBag.CurrentBalanceFils = wallet?.BalanceFils ?? 0;
-        return View(new ManualCreditViewModel { PartnerId = id });
+        ViewBag.CurrentBalanceFils = wallet.BalanceFils;
+
+        return View(new ManualCreditViewModel
+        {
+            PartnerId = id
+        });
     }
 
     [HttpPost]
@@ -143,18 +180,76 @@ public class PartnersController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Credit(ManualCreditViewModel model)
     {
-        if (model.AmountAed <= 0) ModelState.AddModelError("AmountAed", "Amount must be positive.");
-        if (string.IsNullOrWhiteSpace(model.Reason)) ModelState.AddModelError("Reason", "Reason is required.");
-        if (!ModelState.IsValid) return View(model);
+        if (model.AmountAed <= 0)
+        {
+            ModelState.AddModelError(
+                nameof(model.AmountAed),
+                "Amount must be positive.");
+        }
 
-        long amountFils = (long)Math.Round(model.AmountAed * 100m, MidpointRounding.AwayFromZero);
+        if (string.IsNullOrWhiteSpace(model.Reason))
+        {
+            ModelState.AddModelError(
+                nameof(model.Reason),
+                "Reason is required.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            var partner = await _partners.GetByIdAsync(model.PartnerId);
+            var wallet = await _wallets.GetByPartnerAsync(model.PartnerId);
+
+            ViewBag.PartnerName = partner?.Name;
+            ViewBag.CurrentBalanceFils = wallet?.BalanceFils ?? 0;
+
+            return View(model);
+        }
+
+        // Verify partner exists.
+        var existingPartner = await _partners.GetByIdAsync(model.PartnerId);
+
+        if (existingPartner == null)
+            return NotFound("Partner not found.");
+
+        // Verify wallet exists before starting the transaction.
+        var existingWallet = await _wallets.GetByPartnerAsync(model.PartnerId);
+
+        if (existingWallet == null)
+        {
+            _logger.LogWarning(
+                "Cannot manually credit. Wallet not found for partner {PartnerId}",
+                model.PartnerId);
+
+            ModelState.AddModelError(
+                string.Empty,
+                "Wallet not found for this partner.");
+
+            ViewBag.PartnerName = existingPartner.Name;
+            ViewBag.CurrentBalanceFils = 0;
+
+            return View(model);
+        }
+
+        long amountFils = (long)Math.Round(
+            model.AmountAed * 100m,
+            MidpointRounding.AwayFromZero);
+
         var correlationId = $"manual-credit-{Guid.NewGuid():N}";
+
         await using var txn = await _uow.BeginTransactionAsync();
+
         try
         {
+            // IMPORTANT: Pass PartnerId, not Wallet.Id.
             await _walletSvc.CreditAsync(
-                (await _wallets.GetByPartnerAsync(model.PartnerId))!.Id,
-                amountFils, 0, LedgerReason.ManualCredit, model.Reason, correlationId, DateTime.UtcNow);
+                model.PartnerId,
+                amountFils,
+                0,
+                LedgerReason.ManualCredit,
+                model.Reason,
+                correlationId,
+                DateTime.UtcNow);
+
             await txn.CommitAsync();
         }
         catch
@@ -162,19 +257,42 @@ public class PartnersController : Controller
             await txn.RollbackAsync();
             throw;
         }
+
         return RedirectToAction(nameof(Index));
     }
 }
 
 /// <summary>
 /// Thin wrapper around WalletService to expose CreditAsync to the MVC portal.
-/// (The portal uses the same WalletService as the API; no duplicate business logic.)
 /// </summary>
 public sealed class WalletAppService
 {
     private readonly TopupLedger.Application.Services.WalletService _inner;
-    public WalletAppService(TopupLedger.Application.Services.WalletService inner) => _inner = inner;
-    public Task<(Domain.Entities.Wallet wallet, Domain.Entities.WalletLedger entry)> CreditAsync(
-        long walletId, long amountFils, long topupId, LedgerReason reason, string? reasonText, string? correlationId, DateTime atUtc, CancellationToken ct = default) =>
-        _inner.CreditAsync(walletId, amountFils, topupId, reason, reasonText, correlationId, atUtc, ct);
+
+    public WalletAppService(
+        TopupLedger.Application.Services.WalletService inner)
+    {
+        _inner = inner;
+    }
+
+    public Task<(Wallet wallet, WalletLedger entry)> CreditAsync(
+        long partnerId,
+        long amountFils,
+        long topupId,
+        LedgerReason reason,
+        string? reasonText,
+        string? correlationId,
+        DateTime atUtc,
+        CancellationToken ct = default)
+    {
+        return _inner.CreditAsync(
+            partnerId,
+            amountFils,
+            topupId,
+            reason,
+            reasonText,
+            correlationId,
+            atUtc,
+            ct);
+    }
 }

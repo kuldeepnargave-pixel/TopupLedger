@@ -253,22 +253,31 @@ CREATE TABLE operator_reconciliation_files (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE operator_reconciliation_rows (
-  id                BIGINT   NOT NULL AUTO_INCREMENT,
-  file_id           BIGINT   NOT NULL,
-  operator_txn_id   VARCHAR(64)  NOT NULL,
-  msisdn            VARCHAR(20)  NOT NULL,
-  amount_fils       BIGINT   NOT NULL,
-  status            VARCHAR(20)  NOT NULL,
-  event_time_dubai  DATETIME NOT NULL,
-  matched_topup_id  BIGINT   NULL,
-  match             TINYINT  NOT NULL COMMENT '1=Matched,2=MissingInOurs,3=MissingInOperator,4=AmountMismatch,5=StatusMismatch',
-  note              VARCHAR(255) NULL,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_recon_rows (file_id, operator_txn_id),
-  KEY idx_recon_rows_match (file_id, match),
-  KEY idx_recon_rows_topup (matched_topup_id),
-  CONSTRAINT fk_recon_rows_file FOREIGN KEY (file_id)
-    REFERENCES operator_reconciliation_files(id) ON DELETE CASCADE
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    file_id BIGINT NOT NULL,
+    operator_txn_id VARCHAR(64) NOT NULL,
+    msisdn VARCHAR(20) NOT NULL,
+    amount_fils BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    event_time_dubai DATETIME NOT NULL,
+    matched_topup_id BIGINT NULL,
+
+    `match` TINYINT NOT NULL
+        COMMENT '1=Matched,2=MissingInOurs,3=MissingInOperator,4=AmountMismatch,5=StatusMismatch',
+
+    note VARCHAR(255) NULL,
+
+    PRIMARY KEY (id),
+
+    UNIQUE KEY uq_recon_rows (file_id, operator_txn_id),
+    KEY idx_recon_rows_match (file_id, `match`),
+    KEY idx_recon_rows_topup (matched_topup_id),
+
+    CONSTRAINT fk_recon_rows_file
+        FOREIGN KEY (file_id)
+        REFERENCES operator_reconciliation_files(id)
+        ON DELETE CASCADE
+
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------

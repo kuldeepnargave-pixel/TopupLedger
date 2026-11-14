@@ -74,13 +74,28 @@ public class ReportsController : Controller
     }
 
     // ===== Report 6: Wallet statement - ADMIN ONLY =====
+
     [HttpGet]
     [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> WalletStatement(long partnerId, ReportFilterViewModel filter)
+    public async Task<IActionResult> WalletStatement(
+        long partnerId,
+        ReportFilterViewModel filter)
     {
-        var result = await _reports.WalletStatementAsync(partnerId, filter.From, filter.To, HttpContext.RequestAborted);
+        if (partnerId <= 0)
+        {
+            return BadRequest(
+                "Valid Partner ID is required to view the wallet statement.");
+        }
+
+        var result = await _reports.WalletStatementAsync(
+            partnerId,
+            filter.From,
+            filter.To,
+            HttpContext.RequestAborted);
+
         return View(result);
     }
+
 
     // ===== Report 7: Hourly =====
     [HttpGet]

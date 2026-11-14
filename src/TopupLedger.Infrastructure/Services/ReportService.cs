@@ -1,3 +1,4 @@
+
 using System.Data.Common;
 using System.Globalization;
 using System.Text;
@@ -19,7 +20,7 @@ namespace TopupLedger.Infrastructure.Services;
 /// in every result. Reports are read-only: no row locks are taken.
 ///
 /// Business-day semantics: all dates are interpreted in Dubai time (UTC+04:00) with a 22:00
-/// cut-off. The `business_date_utc` column on topups is precomputed at insert time and indexed,
+/// cut-off. The business_date_utc column on topups is precomputed at insert time and indexed,
 /// so report queries filter on that column directly (no per-row timezone conversion at query time).
 /// </summary>
 public sealed class ReportService
@@ -28,7 +29,10 @@ public sealed class ReportService
     private readonly BusinessDayService _businessDays;
     private readonly ILogger<ReportService> _logger;
 
-    public ReportService(TopupLedgerDbContext db, BusinessDayService businessDays, ILogger<ReportService> logger)
+    public ReportService(
+        TopupLedgerDbContext db,
+        BusinessDayService businessDays,
+        ILogger<ReportService> logger)
     {
         _db = db;
         _businessDays = businessDays;
@@ -40,25 +44,37 @@ public sealed class ReportService
     /// both must be valid YYYY-MM-DD, and the range must not exceed 31 business days.
     /// Returns the (fromUtc, toUtc) range.
     /// </summary>
-    public (DateTime fromUtc, DateTime toUtc) ResolveRange(string? from, string? to, int maxDays = 31)
+    public (DateTime fromUtc, DateTime toUtc) ResolveRange(
+        string? from,
+        string? to,
+        int maxDays = 31)
     {
         DateTime f, t;
+
         if (string.IsNullOrEmpty(from) && string.IsNullOrEmpty(to))
         {
             (f, t) = _businessDays.DefaultRange(7);
         }
         else
         {
-            f = string.IsNullOrEmpty(from) ? _businessDays.GetBusinessDayUtc(DateTime.UtcNow).AddDays(-6)
-                                            : _businessDays.ParseBusinessDay(from);
-            t = string.IsNullOrEmpty(to) ? _businessDays.GetBusinessDayUtc(DateTime.UtcNow)
-                                          : _businessDays.ParseBusinessDay(to);
+            f = string.IsNullOrEmpty(from)
+                ? _businessDays.GetBusinessDayUtc(DateTime.UtcNow).AddDays(-6)
+                : _businessDays.ParseBusinessDay(from);
+
+            t = string.IsNullOrEmpty(to)
+                ? _businessDays.GetBusinessDayUtc(DateTime.UtcNow)
+                : _businessDays.ParseBusinessDay(to);
         }
+
         // Range inclusive of both ends: business day T -> business day T+31 covers up to 32 days.
         if ((t - f).TotalDays > maxDays)
-            throw new DomainException("VALIDATION_FAILED",
+        {
+            throw new DomainException(
+                "VALIDATION_FAILED",
                 $"Date range must not exceed {maxDays} business days. Got {(t - f).TotalDays + 1} days.");
-        return (f, t.AddDays(1));  // exclusive upper bound
+        }
+
+        return (f, t.AddDays(1)); // exclusive upper bound
     }
 
     // =====================================================================
@@ -66,49 +82,71 @@ public sealed class ReportService
     // Per business day: top-up count and face value by status, retailer commission,
     // distributor share, grand total row.
     // =====================================================================
-    public async Task<List<Dictionary<string, object>>> DailySummaryAsync(string? from, string? to, CancellationToken ct)
+    public async Task<List<Dictionary<string, object>>> DailySummaryAsync(
+        string? from,
+        string? to,
+        CancellationToken ct)
     {
         var (fromUtc, toUtc) = ResolveRange(from, to);
 
-        // SQL aggregation. CASE WHEN ... SUM per status. Single pass over topups.
         var sql = $@"
 SELECT
-  t.business_date_utc                                            AS business_date,
-  COUNT(*)                                                       AS count_total,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Success}  THEN 1 ELSE 0 END) AS count_success,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Failed}   THEN 1 ELSE 0 END) AS count_failed,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Expired}  THEN 1 ELSE 0 END) AS count_expired,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Pending}  THEN 1 ELSE 0 END) AS count_pending,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Success}  THEN t.face_value_fils ELSE 0 END) AS face_value_success_fils,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Failed}   THEN t.face_value_fils ELSE 0 END) AS face_value_failed_fils,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Expired}  THEN t.face_value_fils ELSE 0 END) AS face_value_expired_fils,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Pending}  THEN t.face_value_fils ELSE 0 END) AS face_value_pending_fils,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Success}  THEN t.retailer_commission_fils ELSE 0 END) AS retailer_commission_fils,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Success}  THEN t.distributor_share_fils ELSE 0 END) AS distributor_share_fils
+  t.business_date_utc AS business_date,
+  COUNT(*) AS count_total,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Success} THEN 1 ELSE 0 END) AS count_success,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Failed} THEN 1 ELSE 0 END) AS count_failed,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Expired} THEN 1 ELSE 0 END) AS count_expired,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Pending} THEN 1 ELSE 0 END) AS count_pending,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Success} THEN t.face_value_fils ELSE 0 END) AS face_value_success_fils,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Failed} THEN t.face_value_fils ELSE 0 END) AS face_value_failed_fils,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Expired} THEN t.face_value_fils ELSE 0 END) AS face_value_expired_fils,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Pending} THEN t.face_value_fils ELSE 0 END) AS face_value_pending_fils,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Success} THEN t.retailer_commission_fils ELSE 0 END) AS retailer_commission_fils,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Success} THEN t.distributor_share_fils ELSE 0 END) AS distributor_share_fils
 FROM topups t
 WHERE t.business_date_utc >= @from AND t.business_date_utc < @to
 GROUP BY t.business_date_utc
 ORDER BY t.business_date_utc;";
 
         var rows = new List<Dictionary<string, object>>();
-        using (var conn = _db.Database.GetDbConnection())
+
+        // Do not dispose the connection returned by EF Core.
+        var conn = _db.Database.GetDbConnection();
+        bool closeConnection = conn.State != System.Data.ConnectionState.Open;
+
+        try
         {
-            await conn.OpenAsync(ct);
+            if (closeConnection)
+                await conn.OpenAsync(ct);
+
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
+
             AddParam(cmd, "@from", fromUtc);
             AddParam(cmd, "@to", toUtc);
+
             using var reader = await cmd.ExecuteReaderAsync(ct);
+
             while (await reader.ReadAsync(ct))
             {
                 var row = new Dictionary<string, object>();
+
                 for (int i = 0; i < reader.FieldCount; i++)
+                {
                     row[reader.GetName(i)] = reader.GetValue(i);
+                }
+
                 rows.Add(row);
             }
         }
+        finally
+        {
+            // Close only if this method opened the connection.
+            if (closeConnection)
+                await conn.CloseAsync();
+        }
 
-        // Compute grand total
+        // Compute grand total.
         var totalRow = new Dictionary<string, object>
         {
             ["business_date"] = "GRAND_TOTAL",
@@ -122,9 +160,11 @@ ORDER BY t.business_date_utc;";
             ["face_value_expired_fils"] = rows.Sum(r => Convert.ToInt64(r["face_value_expired_fils"])),
             ["face_value_pending_fils"] = rows.Sum(r => Convert.ToInt64(r["face_value_pending_fils"])),
             ["retailer_commission_fils"] = rows.Sum(r => Convert.ToInt64(r["retailer_commission_fils"])),
-            ["distributor_share_fils"] = rows.Sum(r => Convert.ToInt64(r["distributor_share_fils"])),
+            ["distributor_share_fils"] = rows.Sum(r => Convert.ToInt64(r["distributor_share_fils"]))
         };
+
         rows.Add(totalRow);
+
         return rows;
     }
 
@@ -132,15 +172,19 @@ ORDER BY t.business_date_utc;";
     // Report 2: Operators
     // Per operator: total count, success %, failed/expired count, average request-to-final-callback seconds.
     // =====================================================================
-    public async Task<List<Dictionary<string, object>>> OperatorsAsync(string? from, string? to, CancellationToken ct)
+    public async Task<List<Dictionary<string, object>>> OperatorsAsync(
+        string? from,
+        string? to,
+        CancellationToken ct)
     {
         var (fromUtc, toUtc) = ResolveRange(from, to);
+
         var sql = $@"
 SELECT
   t.operator AS operator,
   COUNT(*) AS count_total,
   SUM(CASE WHEN t.status = {(int)TopupStatus.Success} THEN 1 ELSE 0 END) AS count_success,
-  SUM(CASE WHEN t.status = {(int)TopupStatus.Failed}  THEN 1 ELSE 0 END) AS count_failed,
+  SUM(CASE WHEN t.status = {(int)TopupStatus.Failed} THEN 1 ELSE 0 END) AS count_failed,
   SUM(CASE WHEN t.status = {(int)TopupStatus.Expired} THEN 1 ELSE 0 END) AS count_expired,
   ROUND(100.0 * SUM(CASE WHEN t.status = {(int)TopupStatus.Success} THEN 1 ELSE 0 END) / COUNT(*), 2) AS success_pct,
   AVG(CASE WHEN t.status IN ({(int)TopupStatus.Success},{(int)TopupStatus.Failed}) AND t.final_state_at_utc IS NOT NULL
@@ -149,6 +193,7 @@ FROM topups t
 WHERE t.business_date_utc >= @from AND t.business_date_utc < @to
 GROUP BY t.operator
 ORDER BY t.operator;";
+
         return await ExecuteReaderAsync(sql, cmd =>
         {
             AddParam(cmd, "@from", fromUtc);
@@ -160,11 +205,18 @@ ORDER BY t.operator;";
     // Report 3: Partners top (ranked by SUCCESS face value)
     // Uses RANK() window function; ties share the same rank.
     // =====================================================================
-    public async Task<List<Dictionary<string, object>>> PartnersTopAsync(string? from, string? to, int limit, CancellationToken ct)
+    public async Task<List<Dictionary<string, object>>> PartnersTopAsync(
+        string? from,
+        string? to,
+        int limit,
+        CancellationToken ct)
     {
-        if (limit <= 0 || limit > 100) limit = 10;
+        if (limit <= 0 || limit > 100)
+            limit = 10;
+
         var (fromUtc, toUtc) = ResolveRange(from, to);
-        var sql = $@"
+
+        var sql = @"
 SELECT ranked.*
 FROM (
   SELECT
@@ -177,12 +229,13 @@ FROM (
     RANK() OVER (ORDER BY SUM(t.face_value_fils) DESC) AS rank
   FROM topups t
   JOIN partners p ON p.id = t.partner_id
-  WHERE t.status = {(int)TopupStatus.Success}
+  WHERE t.status = 2
     AND t.business_date_utc >= @from AND t.business_date_utc < @to
   GROUP BY p.id, p.name
 ) ranked
 WHERE ranked.rank <= @limit
 ORDER BY ranked.rank;";
+
         return await ExecuteReaderAsync(sql, cmd =>
         {
             AddParam(cmd, "@from", fromUtc);
@@ -194,10 +247,15 @@ ORDER BY ranked.rank;";
     // =====================================================================
     // Report 4: Commission by partner per business day (SUCCESS only)
     // =====================================================================
-    public async Task<List<Dictionary<string, object>>> CommissionAsync(string? from, string? to, long? partnerId, CancellationToken ct)
+    public async Task<List<Dictionary<string, object>>> CommissionAsync(
+        string? from,
+        string? to,
+        long? partnerId,
+        CancellationToken ct)
     {
         var (fromUtc, toUtc) = ResolveRange(from, to);
-        var sql = $@"
+
+        var sql = @"
 SELECT
   t.partner_id AS partner_id,
   p.name AS partner_name,
@@ -208,16 +266,17 @@ SELECT
   COUNT(*) AS success_count
 FROM topups t
 JOIN partners p ON p.id = t.partner_id
-WHERE t.status = {(int)TopupStatus.Success}
+WHERE t.status = 2
   AND t.business_date_utc >= @from AND t.business_date_utc < @to
-  {(partnerId.HasValue ? "AND t.partner_id = @partnerId" : "")}
+  AND (@partnerId IS NULL OR t.partner_id = @partnerId)
 GROUP BY t.partner_id, p.name, t.business_date_utc
 ORDER BY t.business_date_utc, t.partner_id;";
+
         return await ExecuteReaderAsync(sql, cmd =>
         {
             AddParam(cmd, "@from", fromUtc);
             AddParam(cmd, "@to", toUtc);
-            if (partnerId.HasValue) AddParam(cmd, "@partnerId", partnerId.Value);
+            AddParam(cmd, "@partnerId", partnerId.HasValue ? partnerId.Value : DBNull.Value);
         }, ct);
     }
 
@@ -225,7 +284,9 @@ ORDER BY t.business_date_utc, t.partner_id;";
     // Report 5: Wallet balances at a past instant (calculated from ledger, NOT balance column)
     // VIEWER cannot access this report (server-side enforced).
     // =====================================================================
-    public async Task<List<Dictionary<string, object>>> WalletsAsOfAsync(DateTime asOfUtc, CancellationToken ct)
+    public async Task<List<Dictionary<string, object>>> WalletsAsOfAsync(
+        DateTime asOfUtc,
+        CancellationToken ct)
     {
         var sql = @"
 SELECT
@@ -238,7 +299,11 @@ JOIN partners p ON p.id = w.partner_id
 LEFT JOIN wallet_ledger l ON l.wallet_id = w.id AND l.created_at_utc <= @asOf
 GROUP BY w.id, w.partner_id, p.name
 ORDER BY w.id;";
-        return await ExecuteReaderAsync(sql, cmd => AddParam(cmd, "@asOf", asOfUtc), ct);
+
+        return await ExecuteReaderAsync(
+            sql,
+            cmd => AddParam(cmd, "@asOf", asOfUtc),
+            ct);
     }
 
     // =====================================================================
@@ -246,36 +311,67 @@ ORDER BY w.id;";
     // VIEWER cannot access this report (server-side enforced).
     // Today's closing balance must equal current wallet balance.
     // =====================================================================
-    public async Task<Dictionary<string, object>> WalletStatementAsync(long partnerId, string? from, string? to, CancellationToken ct)
+    public async Task<Dictionary<string, object>> WalletStatementAsync(
+        long partnerId,
+        string? from,
+        string? to,
+        CancellationToken ct)
     {
         var (fromUtc, toUtc) = ResolveRange(from, to);
-        var wallet = await _db.Wallets.AsNoTracking().FirstOrDefaultAsync(w => w.PartnerId == partnerId, ct);
-        if (wallet == null)
-            throw new DomainException("NOT_FOUND", $"Wallet for partner {partnerId} not found.", httpStatusCode: 404);
 
-        // Opening balance = SUM(ledger up to fromUtc)
+        var wallet = await _db.Wallets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.PartnerId == partnerId, ct);
+
+        if (wallet == null)
+        {
+            throw new DomainException(
+                "NOT_FOUND",
+                $"Wallet for partner {partnerId} not found.",
+                httpStatusCode: 404);
+        }
+
+        // Opening balance = SUM(ledger up to fromUtc).
         var openingSql = @"
 SELECT COALESCE(SUM(CASE WHEN entry_type = 1 THEN amount_fils WHEN entry_type = 2 THEN -amount_fils END), 0) AS opening_fils
 FROM wallet_ledger
 WHERE wallet_id = @walletId AND created_at_utc < @from;";
+
         long openingFils;
-        using (var conn = _db.Database.GetDbConnection())
+
+        // Do not dispose the connection returned by EF Core.
+        var conn = _db.Database.GetDbConnection();
+        bool closeConnection = conn.State != System.Data.ConnectionState.Open;
+
+        try
         {
-            await conn.OpenAsync(ct);
+            if (closeConnection)
+                await conn.OpenAsync(ct);
+
             using var cmd = conn.CreateCommand();
             cmd.CommandText = openingSql;
+
             AddParam(cmd, "@walletId", wallet.Id);
             AddParam(cmd, "@from", fromUtc);
+
             var result = await cmd.ExecuteScalarAsync(ct);
-            openingFils = Convert.ToInt64(result);
+            openingFils = result == null || result == DBNull.Value
+                ? 0L
+                : Convert.ToInt64(result);
+        }
+        finally
+        {
+            if (closeConnection)
+                await conn.CloseAsync();
         }
 
-        // Ledger entries in the period
+        // Ledger entries in the period.
         var entriesSql = @"
 SELECT id, entry_type, reason, amount_fils, running_balance_fils, reason_text, created_at_utc
 FROM wallet_ledger
 WHERE wallet_id = @walletId AND created_at_utc >= @from AND created_at_utc < @to
 ORDER BY id;";
+
         var entries = await ExecuteReaderAsync(entriesSql, cmd =>
         {
             AddParam(cmd, "@walletId", wallet.Id);
@@ -284,7 +380,8 @@ ORDER BY id;";
         }, ct);
 
         // Closing balance = current wallet balance if 'to' includes today, else running balance at last entry.
-        long closingFils = wallet.BalanceFils;  // matches today
+        long closingFils = wallet.BalanceFils;
+
         return new Dictionary<string, object>
         {
             ["wallet_id"] = wallet.Id,
@@ -304,15 +401,15 @@ ORDER BY id;";
     // 24 rows covering 22:00 Dubai -> 21:59 next day Dubai (= the business day window).
     // Zero-activity hours must still appear.
     // =====================================================================
-    public async Task<List<Dictionary<string, object>>> HourlyAsync(string businessDay, CancellationToken ct)
+    public async Task<List<Dictionary<string, object>>> HourlyAsync(
+        string businessDay,
+        CancellationToken ct)
     {
         var businessDayUtc = _businessDays.ParseBusinessDay(businessDay);
-        // Business day window: midnight Dubai on day D (=20:00 UTC on day D-1) to midnight Dubai on day D+1.
-        DateTime windowStartUtc = businessDayUtc.AddHours(-4);  // 20:00 UTC previous day = midnight Dubai
-        DateTime windowEndUtc = businessDayUtc.AddHours(20);   // 20:00 UTC next day = midnight Dubai on D+1
 
-        // Hours in UTC for grouping: business day covers 24 hours from windowStartUtc to windowEndUtc.
-        // We bucket topups by their UTC hour offset within the window.
+        DateTime windowStartUtc = businessDayUtc.AddHours(-4);
+        DateTime windowEndUtc = businessDayUtc.AddHours(20);
+
         var sql = @"
 SELECT
   FLOOR(TIMESTAMPDIFF(MINUTE, @windowStart, t.created_at_utc) / 60) AS hour_index,
@@ -322,6 +419,7 @@ FROM topups t
 WHERE t.created_at_utc >= @windowStart AND t.created_at_utc < @windowEnd
 GROUP BY hour_index
 ORDER BY hour_index;";
+
         var raw = await ExecuteReaderAsync(sql, cmd =>
         {
             AddParam(cmd, "@windowStart", windowStartUtc);
@@ -329,9 +427,12 @@ ORDER BY hour_index;";
         }, ct);
 
         // Pad to exactly 24 hours.
-        var byIndex = raw.Where(r => r["hour_index"] != DBNull.Value)
-                          .ToDictionary(r => Convert.ToInt32(r["hour_index"]), r => r);
+        var byIndex = raw
+            .Where(r => r["hour_index"] != DBNull.Value)
+            .ToDictionary(r => Convert.ToInt32(r["hour_index"]), r => r);
+
         var result = new List<Dictionary<string, object>>();
+
         for (int h = 0; h < 24; h++)
         {
             if (byIndex.TryGetValue(h, out var row))
@@ -348,6 +449,7 @@ ORDER BY hour_index;";
                 });
             }
         }
+
         return result;
     }
 
@@ -355,9 +457,13 @@ ORDER BY hour_index;";
     // Report 8: Failures
     // FAILED/EXPIRED topups by operator with debited/refunded amounts. Flag mismatches.
     // =====================================================================
-    public async Task<List<Dictionary<string, object>>> FailuresAsync(string? from, string? to, CancellationToken ct)
+    public async Task<List<Dictionary<string, object>>> FailuresAsync(
+        string? from,
+        string? to,
+        CancellationToken ct)
     {
         var (fromUtc, toUtc) = ResolveRange(from, to);
+
         var sql = $@"
 SELECT
   t.operator AS operator,
@@ -377,6 +483,7 @@ WHERE t.status IN ({(int)TopupStatus.Failed}, {(int)TopupStatus.Expired})
   AND t.business_date_utc >= @from AND t.business_date_utc < @to
 GROUP BY t.operator, t.status
 ORDER BY t.operator, t.status;";
+
         return await ExecuteReaderAsync(sql, cmd =>
         {
             AddParam(cmd, "@from", fromUtc);
@@ -387,9 +494,13 @@ ORDER BY t.operator, t.status;";
     // =====================================================================
     // Report 9: Reconciliation files
     // =====================================================================
-    public async Task<List<Dictionary<string, object>>> ReconciliationAsync(string? from, string? to, CancellationToken ct)
+    public async Task<List<Dictionary<string, object>>> ReconciliationAsync(
+        string? from,
+        string? to,
+        CancellationToken ct)
     {
         var (fromUtc, toUtc) = ResolveRange(from, to);
+
         var sql = @"
 SELECT
   id AS file_id,
@@ -405,6 +516,7 @@ SELECT
 FROM operator_reconciliation_files
 WHERE uploaded_at_utc >= @from AND uploaded_at_utc < @to
 ORDER BY uploaded_at_utc DESC;";
+
         return await ExecuteReaderAsync(sql, cmd =>
         {
             AddParam(cmd, "@from", fromUtc);
@@ -417,10 +529,19 @@ ORDER BY uploaded_at_utc DESC;";
     // Active partners without a SUCCESS topup in the last N days.
     // Includes partners who never had a successful topup (last_success_date = null).
     // =====================================================================
-    public async Task<List<Dictionary<string, object>>> PartnersInactiveAsync(int days, CancellationToken ct)
+    public async Task<List<Dictionary<string, object>>> PartnersInactiveAsync(
+        int days,
+        CancellationToken ct)
     {
-        if (days <= 0 || days > 365) throw new DomainException("VALIDATION_FAILED", "days must be 1..365.");
+        if (days <= 0 || days > 365)
+        {
+            throw new DomainException(
+                "VALIDATION_FAILED",
+                "days must be 1..365.");
+        }
+
         var cutoff = DateTime.UtcNow.AddDays(-days);
+
         var sql = @"
 SELECT
   p.id AS partner_id,
@@ -433,30 +554,46 @@ LEFT JOIN topups t ON t.partner_id = p.id AND t.status = 2 AND t.created_at_utc 
 GROUP BY p.id, p.name, p.status, p.created_at_utc
 HAVING last_success_at_utc IS NULL
 ORDER BY p.id;";
-        return await ExecuteReaderAsync(sql, cmd => AddParam(cmd, "@cutoff", cutoff), ct);
+
+        return await ExecuteReaderAsync(
+            sql,
+            cmd => AddParam(cmd, "@cutoff", cutoff),
+            ct);
     }
 
     /// <summary>
     /// Renders report rows as CSV. MSISDNs are already masked at the source for relevant reports;
     /// for safety we also call MaskAll() on any column whose name contains "msisdn".
     /// </summary>
-    public static string ToCsv(IEnumerable<Dictionary<string, object>> rows, IEnumerable<string>? columns = null)
+    public static string ToCsv(
+        IEnumerable<Dictionary<string, object>> rows,
+        IEnumerable<string>? columns = null)
     {
         var sb = new StringBuilder();
         var list = rows.ToList();
-        if (list.Count == 0) return string.Empty;
+
+        if (list.Count == 0)
+            return string.Empty;
+
         var cols = columns?.ToList() ?? list[0].Keys.ToList();
+
         sb.AppendLine(string.Join(",", cols.Select(EscapeCsv)));
+
         foreach (var row in list)
         {
-            sb.AppendLine(string.Join(",", cols.Select(c => EscapeCSVValue(row.TryGetValue(c, out var v) ? v : null))));
+            sb.AppendLine(string.Join(
+                ",",
+                cols.Select(c => EscapeCSVValue(row.TryGetValue(c, out var v) ? v : null))));
         }
+
         return sb.ToString();
     }
 
     private static string EscapeCSVValue(object? v)
     {
-        if (v == null || v == DBNull.Value) return "";
+        if (v == null || v == DBNull.Value)
+            return "";
+
         string s = v switch
         {
             DateTime dt => dt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
@@ -466,40 +603,73 @@ ORDER BY p.id;";
             double d => d.ToString(CultureInfo.InvariantCulture),
             _ => v.ToString() ?? ""
         };
+
         return EscapeCsv(s);
     }
 
     private static string EscapeCsv(string s)
     {
         if (s.Contains(',') || s.Contains('"') || s.Contains('\n'))
+        {
             return "\"" + s.Replace("\"", "\"\"") + "\"";
+        }
+
         return s;
     }
 
-    private async Task<List<Dictionary<string, object>>> ExecuteReaderAsync(string sql, Action<DbCommand>? paramAction, CancellationToken ct)
+    /// <summary>
+    /// Executes a read-only SQL query using EF Core's existing database connection.
+    /// The EF-owned connection is never disposed here.
+    /// </summary>
+    private async Task<List<Dictionary<string, object>>> ExecuteReaderAsync(
+        string sql,
+        Action<DbCommand>? paramAction,
+        CancellationToken ct)
     {
         var rows = new List<Dictionary<string, object>>();
-        using var conn = _db.Database.GetDbConnection();
-        await conn.OpenAsync(ct);
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        paramAction?.Invoke(cmd);
-        using var reader = await cmd.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
+
+        var conn = _db.Database.GetDbConnection();
+        bool closeConnection = conn.State != System.Data.ConnectionState.Open;
+
+        try
         {
-            var row = new Dictionary<string, object>();
-            for (int i = 0; i < reader.FieldCount; i++)
-                row[reader.GetName(i)] = reader.IsDBNull(i) ? null! : reader.GetValue(i);
-            rows.Add(row);
+            if (closeConnection)
+                await conn.OpenAsync(ct);
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+
+            paramAction?.Invoke(cmd);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+
+            while (await reader.ReadAsync(ct))
+            {
+                var row = new Dictionary<string, object>();
+
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    row[reader.GetName(i)] =
+                        reader.IsDBNull(i) ? null! : reader.GetValue(i);
+                }
+
+                rows.Add(row);
+            }
         }
+        finally
+        {
+            if (closeConnection)
+                await conn.CloseAsync();
+        }
+
         return rows;
     }
 
-    private static void AddParam(DbCommand cmd, string name, object value)
+    private static void AddParam(DbCommand cmd, string name, object? value)
     {
         var p = cmd.CreateParameter();
         p.ParameterName = name;
-        p.Value = value;
+        p.Value = value ?? DBNull.Value;
         cmd.Parameters.Add(p);
     }
 }

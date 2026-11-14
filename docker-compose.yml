@@ -1,57 +1,70 @@
+
 # TopupLedger - Docker Compose
-# Brings up MySQL 8, the ASP.NET Core API, and the MVC Admin Portal.
-# Usage:
-#   docker compose up --build
-# Then:
-#   API:    http://localhost:8080/swagger
-#   Portal: http://localhost:8081
-#   MySQL:  localhost:3306  (root/changeme_dev_only)
+# Services: MySQL 8, ASP.NET Core API, MVC Admin Portal
 #
-# DEV-ONLY credentials are embedded in this file for convenience. For production, use
-# Docker secrets or environment variables and NEVER commit real secrets.
+# Start: docker compose up --build
+# Stop:  docker compose down
+#
+# API:    http://localhost:8080/swagger
+# Portal: http://localhost:8081
+# MySQL:  localhost:3307 (root/admin)
 
 services:
   mysql:
     image: mysql:8.0
     container_name: topupledger-mysql
     restart: unless-stopped
+
     environment:
-      MYSQL_ROOT_PASSWORD: changeme_dev_only
+      MYSQL_ROOT_PASSWORD: admin
       MYSQL_DATABASE: topupledger
       TZ: UTC
+
     ports:
-      - "3306:3306"
+      - "3307:3306"
+
     volumes:
       - mysql_data:/var/lib/mysql
       - ./db/mysql.cnf:/etc/mysql/conf.d/topupledger.cnf:ro
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pchangeme_dev_only"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-padmin"]
       interval: 5s
       timeout: 5s
       retries: 20
+      start_period: 20s
 
   api:
     build:
       context: .
       dockerfile: src/TopupLedger.Api/Dockerfile
+
     container_name: topupledger-api
     restart: unless-stopped
+
     depends_on:
       mysql:
         condition: service_healthy
+
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Default: "Server=mysql;Port=3306;Database=topupledger;User=root;Password=changeme_dev_only;CharSet=utf8mb4;"
+
+      ConnectionStrings__Default: "Server=mysql;Port=3306;Database=topupledger;User=root;Password=admin;CharSet=utf8mb4;"
+
       Secrets__MasterKey: "DEV_ONLY_MASTER_KEY_DO_NOT_USE_IN_PRODUCTION_32B!"
       AdminApi__AdminApiKey: "dev-admin-api-key"
+
       OperatorCallbacks__Tokens__etisalat: "dev-operator-token-etisalat"
       OperatorCallbacks__Tokens__du: "dev-operator-token-du"
+
       OperatorSimulation__Enabled: "true"
       OperatorSimulation__CallbackBaseUrl: "http://api:8080"
+
       TZ: UTC
+
     ports:
       - "8080:8080"
 
@@ -59,18 +72,25 @@ services:
     build:
       context: .
       dockerfile: src/TopupLedger.Portal/Dockerfile
+
     container_name: topupledger-portal
     restart: unless-stopped
+
     depends_on:
       mysql:
         condition: service_healthy
+
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8081
-      ConnectionStrings__Default: "Server=mysql;Port=3306;Database=topupledger;User=root;Password=changeme_dev_only;CharSet=utf8mb4;"
+
+      ConnectionStrings__Default: "Server=mysql;Port=3306;Database=topupledger;User=root;Password=admin;CharSet=utf8mb4;"
+
       Secrets__MasterKey: "DEV_ONLY_MASTER_KEY_DO_NOT_USE_IN_PRODUCTION_32B!"
       OperatorSimulation__Enabled: "false"
+
       TZ: UTC
+
     ports:
       - "8081:8081"
 

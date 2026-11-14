@@ -31,7 +31,7 @@ VALUES
 -- Hashes were generated with BCrypt.Net-Next at WorkFactor=11.
 -- ---------------------------------------------------------------------------
 INSERT INTO admin_users (username, password_hash, role, created_at_utc) VALUES
-  ('admin',  '$2a$11$9qA8jKqkN3yQxqyO0OZqL.E0t5r3p2E0bXvM5xY/0Z4g8w2KxL.ZO', 1, '2025-12-01 00:00:00'),
+  ('admin', '$2a$11$UmGUgJgI5nMwd3N2s2mzYe1fWrLyeqbDaOJZJWNIm9UC35X9XjEJC', 1, '2025-12-01 00:00:00'),
   ('viewer', '$2a$11$2qkKnL2P0q9V3F1p3qYxXua7C3d1mCjO1DgY3sB7o9P8tL3KpC4eK', 2, '2025-12-01 00:00:00');
 
 -- ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+
 using Microsoft.AspNetCore.Authentication.Cookies;
 using TopupLedger.Infrastructure;
 using TopupLedger.Portal.Controllers;
@@ -29,6 +30,7 @@ builder.Services.AddAuthorization(o =>
 });
 
 builder.Services.AddTopupLedgerInfrastructure(builder.Configuration);
+builder.Services.AddScoped<WalletAppService>();
 
 var app = builder.Build();
 

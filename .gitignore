@@ -1,0 +1,42 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+*.lock.json
+*.nuget.props
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+[Bb]uild/
+
+# Local secrets
+appsettings.Development.json
+appsettings.Production.json
+secrets.json
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# Test results
+TestResults/
+*.coverage
+*.trx
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+*.swp
+*~
+
+# Final ZIP (generated artifact, not committed)
+*.zip

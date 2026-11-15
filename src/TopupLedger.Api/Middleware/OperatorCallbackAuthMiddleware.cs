@@ -36,7 +36,7 @@ public sealed class OperatorCallbackAuthMiddleware
 
         // Extract operator from the path: /api/v1/operator/callbacks/{operator}
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var opCode = parts.Length >= 4 ? parts[3] : null;
+        var opCode = parts.Length >= 5 ? parts[4] : null;
         if (opCode == null)
         {
             await WriteErrorAsync(ctx, "VALIDATION_FAILED", 400, "Operator path segment is missing.");

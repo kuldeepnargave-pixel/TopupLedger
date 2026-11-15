@@ -2,15 +2,33 @@
   "info": {
     "name": "TopupLedger",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "TopupLedger B2B Mobile Top-up API.\n\nEnvironment variables required:\n- baseUrl           (e.g. http://localhost:8080)\n- partnerApiKey     (e.g. pk_test_acme_001)\n- partnerSecret     (e.g. sk_test_EJ3NS3_UAE_2026_k7Rm - shown once at creation)\n- adminApiKey       (e.g. dev-admin-api-key)\n- etisalatToken     (e.g. dev-operator-token-etisalat)\n- duToken           (e.g. dev-operator-token-du)\n\nThe pre-request script computes the X-Signature header using HMAC-SHA256 over:\n  METHOD\\nPATH\\nX-Timestamp\\nIdempotency-Key\\nSHA256(rawBody)\n\nIt uses the raw request body bytes (Postman's pm.request.body.raw) - do NOT reformat\nthe JSON body or the signature will not match."
+    "description": "TopupLedger B2B Mobile Top-up API.\n\nConfigure these collection variables before testing:\n- baseUrl: http://localhost:8080\n- partnerApiKey: YOUR_NEW_ROTATED_PARTNER_API_KEY\n- partnerSecret: YOUR_NEW_ROTATED_PARTNER_SECRET\n- adminApiKey: dev-admin-api-key (if enabled in your local API)\n- etisalatToken: dev-operator-token-etisalat\n- duToken: dev-operator-token-du\n\nPartner HMAC signature format:\nMETHOD\\nPATH\\nX-Timestamp\\nIdempotency-Key\\nSHA256(rawBody)\n\nThe collection pre-request script signs only /api/v1/partner/* requests. Operator callbacks and reports use their own authentication."
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:8080" },
-    { "key": "partnerApiKey", "value": "pk_test_acme_001" },
-    { "key": "partnerSecret", "value": "REPLACE_WITH_YOUR_SECRET_SHOWN_AT_PARTNER_CREATION" },
-    { "key": "adminApiKey", "value": "dev-admin-api-key" },
-    { "key": "etisalatToken", "value": "dev-operator-token-etisalat" },
-    { "key": "duToken", "value": "dev-operator-token-du" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "partnerApiKey",
+      "value": "pk_live_1bedbaa8f460c8e365af0431"
+    },
+    {
+      "key": "partnerSecret",
+      "value": "sk_live_11851bc6c72071c15ad5b44011c86bec081cb7fd"
+    },
+    {
+      "key": "adminApiKey",
+      "value": "dev-admin-api-key"
+    },
+    {
+      "key": "etisalatToken",
+      "value": "dev-operator-token-etisalat"
+    },
+    {
+      "key": "duToken",
+      "value": "dev-operator-token-du"
+    }
   ],
   "event": [
     {
@@ -18,48 +36,49 @@
       "script": {
         "type": "text/javascript",
         "exec": [
-          "// === HMAC-SHA256 pre-request script for TopupLedger partner API ===",
-          "// Computes X-Signature over METHOD\\nPATH\\nX-Timestamp\\nIdempotency-Key\\nSHA256(rawBody).",
-          "// The body SHA256 is computed from the RAW body bytes exactly as Postman will send them;",
-          "// do not reformat the JSON body or the signature will not match.",
+          "// TopupLedger Partner API - HMAC SHA256",
+          "// Runs only for /api/v1/partner/* requests.",
           "",
-          "const method = pm.request.method;",
-          "const url = new URL(pm.request.url.toString());",
-          "const path = url.pathname;  // excludes query string and host",
+          "const method = pm.request.method.toUpperCase();",
+          "const path = \"/\" + (pm.request.url.path || []).join(\"/\");",
           "",
-          "// X-Timestamp: unix seconds, UTC, must be within +/- 300s of server time.",
-          "const timestamp = Math.floor(Date.now() / 1000).toString();",
+          "if (!path.startsWith(\"/api/v1/partner/\")) {",
+          "    console.log(\"HMAC skipped for:\", path);",
+          "} else {",
+          "    const timestamp = Math.floor(Date.now() / 1000).toString();",
           "",
-          "// Idempotency-Key: required for POST. Generate a fresh UUID per request.",
-          "let idemKey = pm.request.headers.get('Idempotency-Key');",
-          "if (method === 'POST' && !idemKey) {",
-          "  idemKey = pm.variables.replaceIn('{{$guid}}');",
-          "  pm.request.headers.add({ key: 'Idempotency-Key', value: idemKey });",
-          "}",
-          "idemKey = idemKey || '';",
+          "    let idemKey = pm.request.headers.get(\"Idempotency-Key\");",
+          "    if (method === \"POST\" && !idemKey) {",
+          "        idemKey = pm.variables.replaceIn(\"{{$guid}}\");",
+          "        pm.request.headers.add({ key: \"Idempotency-Key\", value: idemKey });",
+          "    }",
+          "    idemKey = idemKey || \"\";",
           "",
-          "// Body SHA256. For GET, hash of empty string.",
-          "let body = '';",
-          "if (pm.request.body && pm.request.body.raw) {",
-          "  body = pm.request.body.raw;",
-          "}",
-          "const bodySha256 = CryptoJS.SHA256(body).toString();  // CryptoJS is built-in to Postman",
+          "    let body = \"\";",
+          "    if (pm.request.body && pm.request.body.raw) {",
+          "        body = pm.request.body.raw;",
+          "    }",
           "",
-          "// Build string-to-sign (no trailing newline).",
-          "const stringToSign = [method, path, timestamp, idemKey, bodySha256].join('\\n');",
+          "    const bodySha256 = CryptoJS.SHA256(body).toString();",
+          "    const stringToSign = [method, path, timestamp, idemKey, bodySha256].join(\"\\n\");",
           "",
-          "// HMAC-SHA256 with the partner secret.",
-          "const secret = pm.variables.get('partnerSecret');",
-          "const signature = CryptoJS.HmacSHA256(stringToSign, secret).toString();  // lowercase hex",
+          "    const secret = pm.variables.get(\"partnerSecret\");",
+          "    const apiKey = pm.variables.get(\"partnerApiKey\");",
+          "    if (!secret || !apiKey || secret.startsWith(\"YOUR_NEW_\") || apiKey.startsWith(\"YOUR_NEW_\")) {",
+          "        throw new Error(\"Configure partnerApiKey and partnerSecret with your newly rotated credentials.\");",
+          "    }",
           "",
-          "pm.request.headers.add({ key: 'X-Api-Key', value: pm.variables.get('partnerApiKey') });",
-          "pm.request.headers.add({ key: 'X-Timestamp', value: timestamp });",
-          "pm.request.headers.add({ key: 'X-Signature', value: signature });",
+          "    const signature = CryptoJS.HmacSHA256(stringToSign, secret).toString(CryptoJS.enc.Hex);",
           "",
-          "// Helpful debug: log what we signed (do NOT log the secret).",
-          "console.log('String-to-sign:', JSON.stringify(stringToSign));",
-          "console.log('Body SHA256:', bodySha256);",
-          "console.log('Signature:', signature);"
+          "    pm.request.headers.upsert({ key: \"X-Api-Key\", value: apiKey });",
+          "    pm.request.headers.upsert({ key: \"X-Timestamp\", value: timestamp });",
+          "    pm.request.headers.upsert({ key: \"X-Signature\", value: signature });",
+          "",
+          "    console.log(\"HMAC Path:\", path);",
+          "    console.log(\"String-to-sign:\", JSON.stringify(stringToSign));",
+          "    console.log(\"Body SHA256:\", bodySha256);",
+          "    console.log(\"HMAC signature generated.\");",
+          "}"
         ]
       }
     }
@@ -72,9 +91,22 @@
           "name": "Create top-up",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/api/v1/partner/topups",
-            "body": { "mode": "raw", "raw": "{\"msisdn\":\"0501234567\",\"amount\":\"25.00\",\"operator\":\"ETISALAT\",\"clientRef\":\"RTL-000981\"}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"msisdn\": \"0501234567\",\n  \"amount\": \"25.00\",\n  \"operator\": \"ETISALAT\",\n  \"clientRef\": \"RTL-000981\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
@@ -118,16 +150,25 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.request.headers.add({ key: 'X-Operator-Token', value: pm.variables.get('etisalatToken') });",
-                  "pm.request.headers.add({ key: 'Content-Type', value: 'application/json' });"
+                  "pm.request.headers.upsert({ key: 'X-Operator-Token', value: pm.variables.get('etisalatToken') });",
+                  "pm.request.headers.upsert({ key: 'Content-Type', value: 'application/json' });"
                 ]
               }
             }
           ],
           "request": {
             "method": "POST",
+            "header": [],
             "url": "{{baseUrl}}/api/v1/operator/callbacks/etisalat",
-            "body": { "mode": "raw", "raw": "{\"operatorTxnId\":\"ETS-TEST-1\",\"topupId\":1,\"status\":\"SUCCESS\"}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operatorTxnId\": \"ETS-TEST-1\",\n  \"topupId\": 1,\n  \"status\": \"SUCCESS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
@@ -138,16 +179,25 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.request.headers.add({ key: 'X-Operator-Token', value: pm.variables.get('duToken') });",
-                  "pm.request.headers.add({ key: 'Content-Type', value: 'application/json' });"
+                  "pm.request.headers.upsert({ key: 'X-Operator-Token', value: pm.variables.get('duToken') });",
+                  "pm.request.headers.upsert({ key: 'Content-Type', value: 'application/json' });"
                 ]
               }
             }
           ],
           "request": {
             "method": "POST",
+            "header": [],
             "url": "{{baseUrl}}/api/v1/operator/callbacks/du",
-            "body": { "mode": "raw", "raw": "{\"operatorTxnId\":\"DU-TEST-2\",\"topupId\":2,\"status\":\"FAILED\"}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operatorTxnId\": \"DU-TEST-2\",\n  \"topupId\": 2,\n  \"status\": \"FAILED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]
@@ -159,26 +209,91 @@
           "listen": "prerequest",
           "script": {
             "type": "text/javascript",
-            "exec": ["pm.request.headers.add({ key: 'X-Admin-Key', value: pm.variables.get('adminApiKey') });"]
+            "exec": [
+              "pm.request.headers.upsert({ key: 'X-Admin-Key', value: pm.variables.get('adminApiKey') });"
+            ]
           }
         }
       ],
       "item": [
-        { "name": "1. Daily summary", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/daily-summary?from=2026-10-01&to=2026-10-12" } },
-        { "name": "2. Operators", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/operators?from=2026-10-01&to=2026-10-12" } },
-        { "name": "3. Partners top", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/partners/top?from=2026-10-01&to=2026-10-12&limit=10" } },
-        { "name": "4. Commission", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/commission?from=2026-10-01&to=2026-10-12" } },
-        { "name": "5. Wallets as-of", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/wallets?asOf=2026-10-12T12:00:00Z" } },
-        { "name": "6. Wallet statement", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/wallets/1/statement?from=2026-10-01&to=2026-10-12" } },
-        { "name": "7. Hourly", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/hourly?businessDay=2026-10-12" } },
-        { "name": "8. Failures", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/failures?from=2026-10-01&to=2026-10-12" } },
-        { "name": "9. Reconciliation files", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/reconciliation?from=2026-10-01&to=2026-10-12" } },
-        { "name": "10. Inactive partners", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/partners/inactive?days=7" } }
+        {
+          "name": "1. Daily summary",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/daily-summary?from=2026-10-01&to=2026-10-12"
+          }
+        },
+        {
+          "name": "2. Operators",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/operators?from=2026-10-01&to=2026-10-12"
+          }
+        },
+        {
+          "name": "3. Partners top",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/partners/top?from=2026-10-01&to=2026-10-12&limit=10"
+          }
+        },
+        {
+          "name": "4. Commission",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/commission?from=2026-10-01&to=2026-10-12"
+          }
+        },
+        {
+          "name": "5. Wallets as-of",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/wallets?asOf=2026-10-12T12:00:00Z"
+          }
+        },
+        {
+          "name": "6. Wallet statement",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/wallets/1/statement?from=2026-10-01&to=2026-10-12"
+          }
+        },
+        {
+          "name": "7. Hourly",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/hourly?businessDay=2026-10-12"
+          }
+        },
+        {
+          "name": "8. Failures",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/failures?from=2026-10-01&to=2026-10-12"
+          }
+        },
+        {
+          "name": "9. Reconciliation files",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/reconciliation?from=2026-10-01&to=2026-10-12"
+          }
+        },
+        {
+          "name": "10. Inactive partners",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/partners/inactive?days=7"
+          }
+        }
       ]
     },
     {
       "name": "Health",
-      "request": { "method": "GET", "url": "{{baseUrl}}/health" }
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
     }
   ]
 }

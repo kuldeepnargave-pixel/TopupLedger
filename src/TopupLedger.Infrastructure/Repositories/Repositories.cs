@@ -299,14 +299,23 @@ public sealed class SettlementRepository : ISettlementRepository
         await using var txn = await _db.Database.BeginTransactionAsync(ct);
         try
         {
+            // Save the parent settlement first so its database-generated ID is available.
             await _db.Settlements.AddAsync(settlement, ct);
             await _db.SaveChangesAsync(ct);
+
+            // Assign the generated SettlementId to every child row before inserting it.
             foreach (var batch in items.Chunk(500))
             {
+                foreach (var item in batch)
+                {
+                    item.SettlementId = settlement.Id;
+                }
+
                 await _db.SettlementItems.AddRangeAsync(batch, ct);
                 await _db.SaveChangesAsync(ct);
                 _db.ChangeTracker.Clear();
             }
+
             await txn.CommitAsync(ct);
             return settlement.Id;
         }
